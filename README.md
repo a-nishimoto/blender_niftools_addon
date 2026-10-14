@@ -154,7 +154,7 @@ build dependencies and generates the library bundled with the extension.
 | Item | What is fetched or built |
 | --- | --- |
 | Bundled Python dependency | **PyFFI `2.2.4.dev3`**, downloaded as a wheel from the configured pip index. `--no-deps` prevents fetching its dependencies. |
-| Generated Python dependency | **nifgen `1.1.0`**, generated in Docker and packaged locally as a wheel. Its version follows the add-on manifest. |
+| Generated Python dependency | **nifgen `1.1.0`**, built locally from cobra-tools' generated code, rather than downloaded from PyPI. The version comes from the add-on manifest, not an upstream nifgen release. |
 | Host Python build tool | **setuptools `>=61.0`**, installed into pip's isolated build environment for the nifgen wheel. |
 | Docker base image | **`python:3.10.8`**, normally pulled from Docker Hub unless cached. |
 | Container build tools | **pip** and **setuptools** are upgraded without version pins. |
@@ -179,6 +179,24 @@ commits:
 [`install/docker-compose.yml`](install/docker-compose.yml) builds one local
 `codegen` service and mounts the generated output directory. It does not reference
 additional prebuilt images.
+
+The code-generation and packaging flow is:
+
+1. Docker combines the pinned cobra-tools generator with NIF definitions, spells,
+   and utilities from new-pyffi and the `nif.xml` specification from nifxml.
+2. [`install/generate.sh`](install/generate.sh) runs cobra-tools' `codegen.py`
+   and copies the required modules from its `generated` package to the build
+   output directory.
+3. The packaging script copies that package into a `nifgen` directory, then
+   [`install/rename_nifgen.py`](install/rename_nifgen.py) rewrites internal package
+   references from `generated` to `nifgen`.
+4. [`install/build_nifgen_wheel.py`](install/build_nifgen_wheel.py) packages the
+   result as `nifgen-1.1.0-py3-none-any.whl`. The packaging script reads `1.1.0`
+   from [`blender_manifest.toml`](io_scene_niftools/blender_manifest.toml) and
+   passes it to the wheel builder; this is the add-on's version, assigned locally
+   to the generated library.
+5. The extension ZIP bundles the nifgen wheel alongside the downloaded PyFFI
+   wheel for installation by Blender.
 
 ### Tools required on the host
 
