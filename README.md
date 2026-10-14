@@ -21,19 +21,10 @@ You do **not** need to build Blender or install Python dependencies into Blender
 manually. The host Python builds the package; Docker generates the NIF library;
 Blender installs the bundled dependency wheels.
 
-## Build your fork
+## Build instructions
 
-If you already cloned your fork, open a terminal in its repository root and skip
-the clone command. Otherwise, replace `YOUR_GITHUB_USERNAME` below:
-
-```sh
-git clone https://github.com/YOUR_GITHUB_USERNAME/blender_niftools_addon.git
-cd blender_niftools_addon
-```
-
-The current checkout has no Git submodules. The build fetches its code-generation
-dependencies using the revisions pinned in [`install/Dockerfile`](install/Dockerfile).
-The old instructions to generate a module manually are unnecessary for this build.
+Open a terminal in the root of the local repository folder and follow the
+instructions for your operating system below.
 
 ### macOS or Linux
 
@@ -104,7 +95,7 @@ its image. Each build clears `install/temp`; keep files you want to retain elsew
 1. Open Blender **5.0 or newer**.
 2. Open **Edit → Preferences → Get Extensions**.
 3. Open the menu in the upper-right corner and choose **Install from Disk…**.
-4. Select the ZIP produced by the build above, then confirm installation.
+4. Select the completed extension ZIP, then confirm installation.
    Keep the ZIP intact: do not select GitHub's **Code → Download ZIP** source
    archive, which lacks the generated library and bundled dependencies.
 5. In **Preferences → Add-ons**, search for `NifTools` and enable
@@ -130,7 +121,7 @@ uninstall the existing NifTools extension in Preferences, then install the new Z
 | `python: command not found` or `No module named tomllib` | Activate the virtual environment and check `python --version`. The build scripts require Python 3.11+. |
 | `No module named pip` | Use a Python installation with pip/venv support, then recreate and activate the virtual environment. On Linux, your distribution may package venv separately. |
 | Docker cannot connect, or `docker compose` is unavailable | Start Docker and confirm both `docker info` and `docker compose version` succeed in the same terminal. |
-| Container fails with `./generate.sh: permission denied` | Set executable permission on `install/generate.sh` as described above and rebuild. |
+| Container fails with `./generate.sh: permission denied` | Run `chmod +x install/generate.sh` in Bash or Git Bash from the repository root, then rebuild. |
 | Dependency downloads fail | Check the first failing pip or Docker command in the terminal output and verify access to PyPI, GitHub, and the container registry. |
 | Blender rejects the ZIP or cannot import `nifgen`/`pyffi` | Use the completed build ZIP, with the manifest at its root and both wheels in `wheels/`. Do not install a source archive or copy only `io_scene_niftools` from the checkout. |
 | Manifest lists a wheel that was not built | If you changed the add-on version, also update the `nifgen` wheel filename in `blender_manifest.toml` to match, then rebuild. |
@@ -151,3 +142,65 @@ installation before building its replacement.
   and [issue tracker](https://github.com/niftools/blender_niftools_addon/issues).
   For fork-specific problems, use your fork's issue tracker and include your
   Blender version, OS, commit, and build output or Blender error.
+
+## Dependencies and build downloads
+
+Cloning this repository downloads no dependencies: the current checkout has no
+Git submodules. Running `install/makezip.sh` or `install/makezip.bat` downloads
+build dependencies and generates the library bundled with the extension.
+
+### Python packages and Docker image
+
+| Item | What is fetched or built |
+| --- | --- |
+| Bundled Python dependency | **PyFFI `2.2.4.dev3`**, downloaded as a wheel from the configured pip index. `--no-deps` prevents fetching its dependencies. |
+| Generated Python dependency | **nifgen `1.1.0`**, generated in Docker and packaged locally as a wheel. Its version follows the add-on manifest. |
+| Host Python build tool | **setuptools `>=61.0`**, installed into pip's isolated build environment for the nifgen wheel. |
+| Docker base image | **`python:3.10.8`**, normally pulled from Docker Hub unless cached. |
+| Container build tools | **pip** and **setuptools** are upgraded without version pins. |
+| Container Python dependencies | The pinned cobra-tools repository's **`requirements.txt`**, plus any transitive dependencies resolved by pip. |
+
+See [`install/makezip.sh`](install/makezip.sh),
+[`install/makezip.bat`](install/makezip.bat),
+[`install/build_nifgen_wheel.py`](install/build_nifgen_wheel.py), and
+[`install/Dockerfile`](install/Dockerfile).
+
+### Code-generation repositories
+
+The Docker build performs ordinary Git clones, then checks out these pinned
+commits:
+
+| Repository | Commit | Purpose |
+| --- | --- | --- |
+| [Candoran2/cobra-tools](https://github.com/Candoran2/cobra-tools) | `99cbdf7fcb7709fcf0e4dc363d17a50ef0410ad7` | Code generator |
+| [DuncanWasHere/new-pyffi](https://github.com/DuncanWasHere/new-pyffi) | `f188986d1d72a31ffc6a981a57f1337e35030d3a` | NIF definitions, spells, and utilities |
+| [Candoran2/nifxml](https://github.com/Candoran2/nifxml) | `9914a2b4984b4909cbc55512fa8162852b211565` | `nif.xml` format specification |
+
+[`install/docker-compose.yml`](install/docker-compose.yml) builds one local
+`codegen` service and mounts the generated output directory. It does not reference
+additional prebuilt images.
+
+### Tools required on the host
+
+Git, **Python 3.11 or newer with pip**, Docker, and **Docker Compose v2** must
+already be installed. macOS/Linux packaging also uses Bash and `zip`; Windows
+packaging uses Command Prompt and PowerShell. Blender itself is not downloaded
+or built by these scripts.
+
+### Optional test, documentation, and CI dependencies
+
+- **Integration tests:** [`testframework/install_deps.sh`](testframework/install_deps.sh)
+  installs Sphinx, nose, PyFFI `2.2.4.dev4`, and
+  `pydevd-pycharm~=201.6668.60`. The Windows test installer installs Sphinx, nose,
+  and the same debugger constraint, but omits an active PyFFI installation.
+- **Documentation:** [`docs/requirements.txt`](docs/requirements.txt) specifies
+  `sphinx>=1.5.6` and `niftools_sphinx_theme>=0.3.3`.
+- **GitHub CI:** The release workflow uses `actions/checkout@v4` and
+  `actions/setup-python@v5` with Python 3.11. A separate PR workflow uses
+  `technote-space/pr-commit-body-action@v1`. Both workflows use `ubuntu-latest`.
+
+The exact contents of cobra-tools' pinned `requirements.txt` have not been
+verified; attempts to retrieve that file during this dependency audit failed.
+The repository revisions and bundled PyFFI version are pinned, but the complete
+Python build environment is not locked. The Docker base image is pinned by tag,
+not by digest.
